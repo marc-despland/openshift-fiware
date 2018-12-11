@@ -1,0 +1,560 @@
+{
+    "kind": "Template",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "fiware-keyrock",
+        "creationTimestamp": null
+    },
+    "objects": [
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "fiware-keyrock",
+                "creationTimestamp": null,
+                "annotations": {
+                    "openshift.io/display-name": "Fiware KeyRock",
+                }
+            },
+            "spec": {
+                "dockerImageRepository": "docker.io/marcdespland/keyrock",
+                "tags": [
+                    {
+                        "name": "latest",
+                        "annotations": {
+                            "description": "Fiware KeyRock IdM",
+                            "iconClass": "icon-git",
+                            "openshift.io/display-name": "Fiware KeyRock IdM",
+                            "supports": "keyrock",
+                            "tags": "fiware, keyrock, idm",
+                            "version": "1.7.0"
+                        },
+                        "from": {
+                            "kind": "DockerImage",
+                            "name": "docker.io/marcdespland/keyrock:latest"
+                        },
+                        "importPolicy": {}
+                    }
+                ]
+            },
+            "status": {
+                "dockerImageRepository": ""
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "PersistentVolumeClaim",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-mysql"
+            },
+            "spec": {
+                "accessModes": [
+                    "ReadWriteOnce"
+                ],
+                "resources": {
+                    "requests": {
+                        "storage": "1Gi"
+                    }
+                }
+            }
+        },
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-idm",
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "${APPLICATION_NAME}-idm"
+                },
+                "annotations": {
+                    "openshift.io/generated-by": "OpenShiftWebConsole"
+                }
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Rolling",
+                    "rollingParams": {
+                        "updatePeriodSeconds": 1,
+                        "intervalSeconds": 1,
+                        "timeoutSeconds": 600,
+                        "maxUnavailable": "25%",
+                        "maxSurge": "25%"
+                    },
+                    "resources": {}
+                },
+                "triggers": [
+                    {
+                        "type": "ConfigChange"
+                    },
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "${APPLICATION_NAME}-idm"
+                            ],
+                            "from": {
+                                "kind": "ImageStreamTag",
+                                "name": "fiware-keyrock:latest"
+                            }
+                        }
+                    }
+                ],
+                "replicas": 1,
+                "test": false,
+                "selector": {
+                    "app": "${APPLICATION_NAME}-idm",
+                    "deploymentconfig": "${APPLICATION_NAME}-idm"
+                },
+                "template": {
+                    "metadata": {
+                        "creationTimestamp": null,
+                        "labels": {
+                            "app": "${APPLICATION_NAME}-idm",
+                            "deploymentconfig": "${APPLICATION_NAME}-idm"
+                        },
+                        "annotations": {
+                            "openshift.io/generated-by": "OpenShiftWebConsole"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "${APPLICATION_NAME}-idm",
+                                "image": "docker.io/marcdespland/keyrock",
+                                "ports": [
+                                    {
+                                        "containerPort": 8080,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "env": [
+                                    {
+                                        "name": "IDM_PORT",
+                                        "value": "8080"
+                                    },
+                                    {
+                                        "name": "DATABASE_HOST",
+                                        "value": "${APPLICATION_NAME}-mysql"
+                                    },
+                                    {
+                                        "name": "IDM_ADMIN_EMAIL",
+                                        "value": "${IDM_ADMIN_EMAIL}"
+                                    },
+                                    {
+                                        "name": "IDM_ADMIN_PASS",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "idm-admin-password"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "IDM_SESSION_SECRET",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "idm-session-secret"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "IDM_ENCRYPTION_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "idm-encryption-key"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "IDM_DB_PASS",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "database-root-password"
+                                            }
+                                        }
+                                    }
+                                ],
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "imagePullPolicy": "Always"
+                            }
+                        ],
+                        "restartPolicy": "Always",
+                        "terminationGracePeriodSeconds": 30,
+                        "dnsPolicy": "ClusterFirst",
+                        "securityContext": {}
+                    }
+                }
+            },
+            "status": {}
+        },
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-mysql",
+                "creationTimestamp": null,
+                "labels": {
+                    "template": "mysql-persistent-template",
+                    "app": "${APPLICATION_NAME}-mysql"
+                },
+                "annotations": {
+                    "template.alpha.openshift.io/wait-for-ready": "true"
+                },
+                "ownerReferences": [
+                    {
+                        "apiVersion": "template.openshift.io/v1",
+                        "kind": "TemplateInstance",
+                        "name": "1b8ef965-26e8-4897-bfb5-dc37e0db1847",
+                        "uid": "f5fc99d9-fd1e-11e8-95fe-02337224100f"
+                    }
+                ]
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Recreate",
+                    "recreateParams": {
+                        "timeoutSeconds": 600
+                    },
+                    "resources": {}
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "mysql"
+                            ],
+                            "from": {
+                                "kind": "ImageStreamTag",
+                                "namespace": "openshift",
+                                "name": "mysql:5.7"
+                            }
+                        }
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ],
+                "replicas": 1,
+                "test": false,
+                "selector": {
+                    "name": "${APPLICATION_NAME}-mysql"
+                },
+                "template": {
+                    "metadata": {
+                        "creationTimestamp": null,
+                        "labels": {
+                            "name": "${APPLICATION_NAME}-mysql"
+                        }
+                    },
+                    "spec": {
+                        "volumes": [
+                            {
+                                "name": "${APPLICATION_NAME}-mysql-data",
+                                "persistentVolumeClaim": {
+                                    "claimName": "${APPLICATION_NAME}-mysql"
+                                }
+                            }
+                        ],
+                        "containers": [
+                            {
+                                "name": "mysql",
+                                "image": "registry.access.redhat.com/rhscl/mysql-57-rhel7",
+                                "ports": [
+                                    {
+                                        "containerPort": 3306,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "env": [
+                                    {
+                                        "name": "MYSQL_USER",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "database-user"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "MYSQL_PASSWORD",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "database-password"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "MYSQL_ROOT_PASSWORD",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "database-root-password"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "MYSQL_DATABASE",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "${APPLICATION_NAME}",
+                                                "key": "database-name"
+                                            }
+                                        }
+                                    }
+                                ],
+                                "resources": {
+                                    "limits": {
+                                        "memory": "512Mi"
+                                    }
+                                },
+                                "volumeMounts": [
+                                    {
+                                        "name": "${APPLICATION_NAME}-mysql-data",
+                                        "mountPath": "/var/lib/mysql/data"
+                                    }
+                                ],
+                                "livenessProbe": {
+                                    "tcpSocket": {
+                                        "port": 3306
+                                    },
+                                    "initialDelaySeconds": 30,
+                                    "timeoutSeconds": 1,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "failureThreshold": 3
+                                },
+                                "readinessProbe": {
+                                    "exec": {
+                                        "command": [
+                                            "/bin/sh",
+                                            "-i",
+                                            "-c",
+                                            "MYSQL_PWD=\"$MYSQL_PASSWORD\" mysql -h 127.0.0.1 -u $MYSQL_USER -D $MYSQL_DATABASE -e 'SELECT 1'"
+                                        ]
+                                    },
+                                    "initialDelaySeconds": 5,
+                                    "timeoutSeconds": 1,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "failureThreshold": 3
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "imagePullPolicy": "IfNotPresent"
+                            }
+                        ],
+                        "restartPolicy": "Always",
+                        "terminationGracePeriodSeconds": 30,
+                        "dnsPolicy": "ClusterFirst",
+                        "securityContext": {}
+                    }
+                }
+            },
+            "status": {}
+        },
+        {
+            "kind": "Route",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-idm-public",
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "${APPLICATION_NAME}-idm",
+                    "network": "public"
+                }
+            },
+            "spec": {
+                "host": "${APPLICATION_PUBLIC_HOSTNAME}",
+                "to": {
+                    "kind": "Service",
+                    "name": "${APPLICATION_NAME}-idm",
+                    "weight": 100
+                },
+                "port": {
+                    "targetPort": "8080-tcp"
+                },
+                "tls": {
+                    "termination": "edge",
+                    "insecureEdgeTerminationPolicy": "Redirect"
+                },
+                "wildcardPolicy": "None"
+            },
+            "status": {
+            }
+        },
+        {
+            "kind": "Service",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-idm",
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "${APPLICATION_NAME}-idm"
+                },
+                "annotations": {
+                    "openshift.io/generated-by": "OpenShiftWebConsole"
+                }
+            },
+            "spec": {
+                "ports": [
+                    {
+                        "name": "8080-tcp",
+                        "protocol": "TCP",
+                        "port": 8080,
+                        "targetPort": 8080
+                    }
+                ],
+                "selector": {
+                    "deploymentconfig": "${APPLICATION_NAME}-idm"
+                },
+                "type": "ClusterIP",
+                "sessionAffinity": "None"
+            },
+            "status": {
+                "loadBalancer": {}
+            }
+        },
+        {
+            "kind": "Service",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}-mysql",
+                "creationTimestamp": null,
+                "labels": {
+                    "template": "mysql-persistent-template",
+                    "app": "${APPLICATION_NAME}-mysql"
+                },
+                "annotations": {
+                    "template.openshift.io/expose-uri": "mysql://{.spec.clusterIP}:{.spec.ports[?(.name==\"mysql\")].port}"
+                },
+                "ownerReferences": [
+                    {
+                        "apiVersion": "template.openshift.io/v1",
+                        "kind": "TemplateInstance",
+                        "name": "1b8ef965-26e8-4897-bfb5-dc37e0db1847",
+                        "uid": "f5fc99d9-fd1e-11e8-95fe-02337224100f"
+                    }
+                ]
+            },
+            "spec": {
+                "ports": [
+                    {
+                        "name": "mysql",
+                        "protocol": "TCP",
+                        "port": 3306,
+                        "targetPort": 3306
+                    }
+                ],
+                "selector": {
+                    "name": "${APPLICATION_NAME}-mysql"
+                },
+                "type": "ClusterIP",
+                "sessionAffinity": "None"
+            },
+            "status": {
+                "loadBalancer": {}
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "app": "${APPLICATION_NAME}"
+                }
+            },
+            "type": "Opaque",
+            "stringData": {
+                "database-user" : "${MYSQL_USER}",
+                "database-password": "${MYSQL_PASSWORD}",
+                "database-root-password" : "${MYSQL_ROOT_PASSWORD}",
+                "database-name" : "sampledb",
+                "idm-admin-email" : "${IDM_ADMIN_EMAIL}",
+                "idm-admin-password" : "${IDM_ADMIN_PASS}",
+                "idm-session-secret" : "${IDM_SESSION_SECRET}",
+                "idm-encryption-key": "${IDM_ENCRYPTION_KEY}"
+
+            }
+        }
+    ],
+    parameters: [
+        {
+            "name": "APPLICATION_NAME", 
+            "displayName": "Application Name",
+            "description": "The name of the deployed application",
+            "value": "fiware-keyrock",
+            "required": true 
+        },
+        {
+            "name": "APPLICATION_PUBLIC_HOSTNAME", 
+            "displayName": "Application Public Hostname",
+            "description": "The public exposition point of the service",
+            "value": "",
+            "required": true 
+        },
+        {
+            "name": "IDM_ADMIN_EMAIL", 
+            "displayName": "Idm Admin Email",
+            "description": "The email address of the Keyrock Idm administrator",
+            "value": "",
+            "required": true 
+        },
+        {
+            "name": "IDM_ADMIN_PASS", 
+            "displayName": "Idm Admin Password",
+            "description": "The password of the Keyrock Idm administrator",
+            "generate": "expression",
+            "from": "[a-zA-Z0-9]{12}",
+            "required": true 
+        },
+        {
+            "name": "IDM_SESSION_SECRET", 
+            "displayName": "Idm Session Secret",
+            "description": "Idm Session Secret",
+            "generate": "expression",
+            "from": "[a-zA-Z0-9]{40}",
+            "required": true 
+        },
+        {
+            "name": "IDM_ENCRYPTION_KEY", 
+            "displayName": "Idm Encryption Key",
+            "description": "Idm Encryption Key",
+            "generate": "expression",
+            "from": "[a-zA-Z0-9]{40}",
+            "required": true 
+        },
+        {
+            "name": "MYSQL_USER", 
+            "displayName": "The MySQL User",
+            "description": "The MySQL User",
+            "generate": "expression",
+            "from": "user_[a-zA-Z0-9]{8}",
+            "required": true 
+        },
+        {
+            "name": "MYSQL_PASSWORD", 
+            "displayName": "The MySQL User Password",
+            "description": "The MySQL User Password",
+            "generate": "expression",
+            "from": "[a-zA-Z0-9]{16}",
+            "required": true 
+        },
+        {
+            "name": "MYSQL_ROOT_PASSWORD", 
+            "displayName": "The MySQL Root Password",
+            "description": "The MySQL Root Password",
+            "generate": "expression",
+            "from": "[a-zA-Z0-9]{16}",
+            "required": true 
+        }
+    ]
+}
